@@ -75,7 +75,7 @@ function raw()
     eps = diel(freq)
 
     # Generate list of atomic positions
-    Elist, Edict, R = generate_shape_FCC(rad, shape, a0)
+    Elist, Edict, R = generate_shape_FCC(shape, a0, rad)
 
     # Use list of atomic positions to determine the Hamiltonian. H is in KPM units
     H, v = slater_koster_FCC(Elist, Edict, onsite, first_neighbour, second_neighbour, A, B)
