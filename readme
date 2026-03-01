@@ -5,9 +5,9 @@ Developers: Hanwen Jin, Simão Meneses João
 
 This code offers a set of tools to help in the study of the plasmonic properties of nanoparticles of different shapes and materials. It is able to compute the rate of hot carrier generation using Fermi's golden rule and the population distribution after relaxation effects are taken into account, using Govorov's formula. The electric field is taken into account using the quasi-static approximation.
 
-It is also able to compute the density of states and band structure of all the specified materials. Currently supported shapes are cubes, octahedra, rhombic dodecahedra and spheres. Currently supported materials are gold, aluminium and palladium.
+It is also able to compute the density of states and band structure of all the specified materials. Currently supported shapes are cubes, octahedra, rhombic, dodecahedra, and spheres. Currently supported materials are gold, aluminum, and palladium.
 
-The hot carrier generation, population distribution and density of states are calculated via a Chebyshev decomposition of the operators.
+The hot carrier generation, population distribution, and density of states are calculated via a Chebyshev decomposition of the operators.
 
 See the documentation (doc) for an explanation of the code.
 

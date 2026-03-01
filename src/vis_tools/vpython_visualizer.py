@@ -121,5 +121,3 @@ while True:
     # col = vp.vec(*col)
 
     # vp.sphere(pos=vec, radius=radius, color=col)
-
-

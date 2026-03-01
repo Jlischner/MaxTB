@@ -1,113 +1,112 @@
 using DelimitedFiles
 
-masterdir = "../src/"
-include(masterdir * "libs/slater_koster.jl")
-include(masterdir * "libs/shape_lib.jl")
-include(masterdir * "libs/potential.jl")
-include(masterdir * "libs/cheb.jl")
-include(masterdir * "libs/sumcheb.jl")
-include(masterdir * "libs/dist.jl")
-include(masterdir * "libs/hcg.jl")
+pathw = "../src/"
+include(pathw*"libs/cheb.jl")
+include(pathw*"libs/dist.jl")
+include(pathw*"libs/hcg.jl")
+include(pathw*"libs/potential.jl")
+include(pathw*"libs/shape_lib.jl")
+include(pathw*"libs/slater_koster.jl")
+include(pathw*"libs/sumcheb.jl")
 
 
-
+# Script with full control over every parameter of the hcg calculation
 function raw()
-    # Script with full control over all parameters of the simulation
 
-
-    # Properties of the nanoparticle (see documentation for options)
+   # Properties of the nanoparticle (see documentation for options)
     shape = "cube"
     mater = "3DTB"
-    rad   = 1.1 # [nm] dimension of nanoparticle
+    rad   = 1.1  # NP radius [nm]
 
-    freq  = 2.0 # [eV] frequency of optical potential
-    eps_m = 1.0 # relative dielectric constant of the environment
+    freq  = 2.0  # optical potential frequency [eV]
+    eps_m = 1.0  # relative dielectric constant of the environment
 
-    tempr = 298 # [K] temperature
+    tempr = 298  # temperature [K]
 
-    # hot carrier generation parameters
-    kappa = 0.0
-    gph   = 0.06 # [eV] broadening
+   # Hot carrier generation parameters
+    kappa = 0.0  # parameter in the broadening function
+    gph   = 0.06  # broadening [eV]
     outname = "hcg.dat"
 
+    N = 400  # total number of Chebyshev polynomials
 
-    N = 400 # number of total Chebyshev polynomials
-
-    # number of Chebyshev polynomials per block
+   # Number of Chebyshev polynomials per block
     NTx = 10
     NTy = 10
 
-    # number of blocks
+   # Number of blocks
     NNL = N÷NTx + 1
     NNR = N÷NTy + 1
-    Nk  = 5 # number of random vectors
+    Nk  = 5  # number of random vectors
 
-
-    # Number of integration points in the energy discretization
+   # Number of integration points in the energy discretization
     Nx = N*2
-    Ny = Nx  
+    Ny = Nx
 
-    # Percentage of Chebyshev polynomials to keep
+   # Percentage of Chebyshev polynomials to keep
     perc1 = 100
     perc2 = perc1
 
-    NE  = N*2+1 # Number of energy points in the integration
-    NEp = N*2+1 # Number of output energy points
+    NE  = N*2+1  # number of energy points in the integration
+    NEp = N*2+1  # number of output energy points
 
-    # Temperature
-    kbT  = tempr*boltzmann # eV
+   # Temperature
+    kbT  = tempr*boltzmann  # [eV]
     beta = 1.0/kbT
 
-    write  = false # write debug information
+    write  = false  # write debug information
 
+   # Construct the TB model corresponding to the selected material
+    onsite, first_neighbor, second_neighbor, A, B, fermi_Ha, a0, diel = tightbinding(mater)
 
-
-
-    # Select material
-    onsite, first_neighbour, second_neighbour, A, B, fermi_Ha, a0, diel = tightbinding(mater)
-
-    # Get the dielectric constant from frequency and material
+   # Get the dielectric constant from the material and the optical frequency
     eps = diel(freq)
 
-    # Generate list of atomic positions
-    Elist, Edict, R = generate_shape_FCC(rad, shape, a0)
+   # Generate list of atomic positions
+    Elist, Edict, R = generate_shape_FCC(shape, a0, rad)
 
-    # Use list of atomic positions to determine the Hamiltonian. H is in KPM units
-    H, v = slater_koster_FCC(Elist, Edict, onsite, first_neighbour, second_neighbour, A, B)
+   # Use list of atomic positions to determine the Hamiltonian H [KPM units]
+    H, v = slater_koster_FCC(Elist, Edict, onsite, first_neighbor, second_neighbor, A, B)
 
-    # get the potential. Phi is in units of eV
-    # Phi = potential_sphere(R, eps, eps_m)
+   # Get the potential Phi [eV]
+    if shape == "sphere"
+        Phi = potential_sphere(R, eps, eps_m)
+    elseif shape == "import"
+        filename = "pot.dat"
+        Phi = comsol_read(filename)
+    else
+        Phi = potential_sphere(R, eps, eps_m)  # calls sphere by default if no COMSOL file
+    end
 
-    # Build the Chebyshev matrix
+   # Build the Chebyshev matrix
     mumn = compute_mumn!(H, v, NNL, NNR, NTx, NTy, Nk)
 
-    # Transform the Chebyshev matrix into the energy-resolved optical matrix
-    # Ei,Ej are in eV, opt is dimensionless
+   # Transform the Chebyshev matrix into the energy-resolved optical matrix
+   # Ei,Ej [eV], opt [dimensionless]
     # Ei,Ej,opt = resum_mu_dd(mumn, Nx, Ny, A, B, perc1, perc2)
 
-
-    # Get the hot carrier generation rate
+   # Get the hot carrier generation rate
     # hcg  = sum_hcg( opt, Ei, Ej, NE, NEp, fermi_Ha, freq, beta, kappa, gph, write)
-
 
     # columns = hcg_conv(mumn, A, B, NE, fermi, freq, beta, kappa, gph, write)
     print_conv = true
-    hcg = hcg_conv(mumn, A, B, NE, fermi_Ha, freq, beta, kappa, gph, print_conv) 
+    if print_conv
+        hcg = hcg_conv(mumn, A, B, NE, fermi_Ha, freq, beta, kappa, gph, print_conv)
+    end
 
-
-
-    # Write the data
-    # columns = Array{Float64}(undef, NE, 4)
-    # columns[:,1] = hcg[1]  # energy list
-    # columns[:,2] = hcg[2]  # hot electron
-    # columns[:,3] = hcg[3]  # hot hole
-
-    # Write the data
-    writedlm(outname, hcg)
+   # Write the data
+#    col1 = collect(hcg[1])  # energy list
+#    col2 = collect(hcg[2])  # hot electron
+#    col3 = collect(hcg[3])  # hot hole
+#    columns = hcat(col1,col2,col3)
+#    open(outname, "w") do io
+#        for i in 1:size(columns,1)
+#            for j in 1:size(columns,2)
+#                @printf(io,"%12.8f ",columns[i,j])
+#            end
+#        Base.write(io,"\n")
+#        end
+#    end
 end
 
-
-
-
 raw()
-

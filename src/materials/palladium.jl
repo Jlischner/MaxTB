@@ -1,19 +1,19 @@
 using Interpolations
 
+
 function palladium()
-    # Palladium 2-center approximation Slater-Koster parameters. 
-    # Taken from page 237 of Papaconstantopolous's book
-    # The factor of two takes the units from Rydberg to Hartree
-    # All units are in Hartree
-    
-    # Local energies at each orbital
+   # Pd Slater-Koster 2-center parameters (approximation)
+   # -> taken from pp.237 of Papaconstantopoulos' Handbook of the Band Structure of Elemental Solids, 2nd ed. (2015)
+   # All quantities are in Rydberg, before being converted to Hartree
+    Ry2eV = 13.605704
+   # Local energies at each orbital [Ry]
     Es  = 0.94261
     Ep  = 1.36110
     Ed1 = 0.37285
     Ed2 = 0.36265
     onsite = [Es,Ed1,Ed1,Ed1,Ed2,Ed2,Ep,Ep,Ep]
 
-    # First neighbour
+   # First neighbor [Ry]
     ss_sig = -0.07962
     pp_sig =  0.17119
     pp_pi  = -0.00540
@@ -24,9 +24,9 @@ function palladium()
     sd_sig = -0.04885
     pd_sig = -0.06563
     pd_pi  =  0.02124
-    first_neighbour = [sp_sig, ss_sig, pp_sig, pp_pi, sd_sig, pd_sig, pd_pi, dd_sig, dd_pi, dd_del]
+    first_neighbor = [sp_sig, ss_sig, pp_sig, pp_pi, sd_sig, pd_sig, pd_pi, dd_sig, dd_pi, dd_del]
 
-    # Second neighbour
+   # Second neighbor [Ry]
     ss_sig = -0.00105
     pp_sig =  0.04282
     pp_pi  = -0.00044
@@ -37,34 +37,80 @@ function palladium()
     sd_sig = -0.00837
     pd_sig = -0.00738
     pd_pi  =  0.00351
-    second_neighbour = [sp_sig, ss_sig, pp_sig, pp_pi, sd_sig, pd_sig, pd_pi, dd_sig, dd_pi, dd_del]
+    second_neighbor = [sp_sig, ss_sig, pp_sig, pp_pi, sd_sig, pd_sig, pd_pi, dd_sig, dd_pi, dd_del]
 
-    # Convert from Rydbert to Hartree
+   # Convert the SK parameters from Ry to Ha
     onsite = onsite./2
-    first_neighbour = first_neighbour./2
-    second_neighbour = second_neighbour./2
+    first_neighbor = first_neighbor./2
+    second_neighbor = second_neighbor./2
 
-    # Frequency paladium (eV)
-    frequencies = [0.1,0.15,0.2,0.26,0.3,0.36,0.4,0.46,0.5,0.56,0.6,0.72,0.8,1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5,2.6,2.7,2.8,2.9,3.0,3.1,3.2,3.3,3.4,3.5,3.6,3.7,3.8,3.9,4.0,4.2,4.4,4.6,4.8,5.0,5.2,5.4,5.6,5.8,6.0,6.2,6.4,6.6,6.8,7.0,7.2,7.4,7.6,7.8,8.0,8.2,8.4,8.6,8.8,9.0,9.5,10.0]
 
-    # real part of dielectric constant of bulk paladium
-    eps_real = [-2915.1656,-1273.2755,-697.6032,-396.3504,-285.5793,-191.8077,-157.86,-128.4192,-114.0636,-94.6737,-84.7616,-63.3699,-53.7411,-38.532,-33.8355,-30.1875,-27.1584,-24.7744,-22.5395,-20.1761,-18.2784,-16.9252,-15.6101,-14.4099,-13.452,-12.4944,-11.7216,-10.8712,-10.1223,-9.4127,-8.8201,-8.1328,-7.5933,-7.1307,-6.6825,-6.304,-5.8828,-5.5056,-5.1404,-4.8361,-4.5195,-4.2125,-3.96,-3.7352,-3.2865,-2.9792,-2.7027,-2.5899,-2.538,-2.3941,-2.1675,-1.9683,-1.7632,-1.5249,-1.3293,-1.1312,-0.9457,-0.744,-0.5696,-0.3979,-0.2352,-0.0984,0.0805,0.2415,0.3936,0.4316,0.5775,0.6591,0.7353,0.8319,0.8771]
 
-    # imaginary part of dielectric constant of bulk paladium
-    eps_imag = [447.279,224.2332,163.2626,125.333,122.9624,114.7036,113.3258,103.4194,93.808,82.2416,75.696,61.074,54.002,41.2022,36.3052,32.33,28.9,25.74,22.6548,20.592,18.88,17.4336,15.834,14.63,13.4602,12.416,11.475,10.6134,9.8136,9.2064,8.58,8.0754,7.6356,7.2324,6.84,6.4818,6.1104,5.824,5.544,5.292,5.0932,4.8972,4.725,4.5114,4.3472,4.1406,3.9964,3.838,3.5712,3.222,2.89,2.6244,2.4024,2.204,2.0276,1.8834,1.7424,1.6498,1.533,1.47,1.4014,1.343,1.2948,1.2848,1.316,1.344,1.3,1.352,1.3696,1.456,1.482]
+   # Pd optical properties (experimental)
+   # -> taken from pp.2212 (12-137) of Hayne's CRC Handbook of Chemistry and Physics, 97th ed. (2016)
+   # Dielectric function calculated from the index of refraction n and the extinction coefficient k
 
+   # Frequency Pd [eV]
+    frequencies = [  0.10,      0.15,     0.20,     0.26,     0.30,     0.36,     0.40,     0.46,     0.50,    0.56,
+                     0.60,      0.72,     0.80,     1.00,     1.10,     1.20,     1.30,     1.40,     1.50,    1.60,
+                     1.70,      1.80,     1.90,     2.00,     2.10,     2.20,     2.30,     2.40,     2.50,    2.60,
+                     2.70,      2.80,     2.90,     3.00,     3.10,     3.20,     3.30,     3.40,     3.50,    3.60,
+                     3.70,      3.80,     3.90,     4.00,     4.20,     4.40,     4.60,     4.80,     5.00,    5.20,
+                     5.40,      5.60,     5.80,     6.00,     6.20,     6.40,     6.60,     6.80,     7.00,    7.20,
+                     7.40,      7.60,     7.80,     8.00,     8.20,     8.40,     8.60,     8.80,     9.00,    9.50,
+                    10.00,     10.50,    11.00,    11.50,    12.00,    12.50,    13.00,    13.50,    14.00,   14.50,
+                    15.00,     15.50,    16.00,    16.50,    17.00,    17.50,    18.00,    18.50,    19.00,   19.50,
+                    20.00,     20.50,    21.00,    21.50,    22.00,    22.50,    23.00,    23.50,    24.00,   25.00,
+                    26.40,     27.80,    29.20]
+
+   # Real part of dielectric constant of bulk Pd:  eps_real = n^2 - k^2
+    eps_real = [-2915.166, -1273.276, -697.603, -396.350, -285.579, -191.808, -157.860, -128.419, -114.064, -94.674,
+                  -84.762,   -63.370,  -53.741,  -38.532,  -33.836,  -30.188,  -27.158,  -24.774,  -22.540, -20.176,
+                  -18.278,   -16.925,  -15.610,  -14.410,  -13.452,  -12.494,  -11.722,  -10.871,  -10.122,  -9.413,
+                   -8.820,    -8.133,   -7.593,   -7.131,   -6.683,   -6.304,   -5.883,   -5.506,   -5.140,  -4.836,
+                   -4.520,    -4.213,   -3.960,   -3.735,   -3.287,   -2.979,   -2.703,   -2.590,   -2.538,  -2.394,
+                   -2.168,    -1.968,   -1.763,   -1.525,   -1.329,   -1.131,   -0.946,   -0.744,   -0.570,  -0.398,
+                   -0.235,    -0.098,    0.080,    0.242,    0.394,    0.432,    0.578,    0.659,    0.735,   0.832,
+                    0.877,     0.923,    0.983,    0.994,    1.004,    0.967,    0.944,    0.944,    0.920,   0.860,
+                    0.801,     0.748,    0.731,    0.727,    0.773,    0.752,    0.797,    0.797,    0.818,   0.794,
+                    0.722,     0.612,    0.531,    0.467,    0.419,    0.390,    0.392,    0.409,    0.414,   0.396,
+                    0.455,     0.512,    0.550]
+
+   # Imaginary part of dielectric constant of bulk Pd:  eps_imag = 2nk
+    eps_imag = [  447.279,   224.233,  163.263,  125.333,  122.962,  114.704,  113.326,  103.419,   93.808,  82.242,
+                   75.696,    61.074,   54.002,   41.202,   36.305,   32.330,   28.900,   25.740,   22.655,  20.592,
+                   18.880,    17.434,   15.834,   14.630,   13.460,   12.416,   11.475,   10.613,    9.814,   9.206,
+                    8.580,     8.075,    7.636,    7.232,    6.840,    6.482,    6.110,    5.824,    5.544,   5.292,
+                    5.093,     4.897,    4.725,    4.511,    4.347,    4.141,    3.996,    3.838,    3.571,   3.222,
+                    2.890,     2.624,    2.402,    2.204,    2.028,    1.883,    1.742,    1.650,    1.533,   1.470,
+                    1.401,     1.343,    1.295,    1.285,    1.316,    1.344,    1.300,    1.352,    1.370,   1.456,
+                    1.482,     1.508,    1.510,    1.547,    1.584,    1.595,    1.581,    1.581,    1.568,   1.564,
+                    1.559,     1.496,    1.426,    1.336,    1.305,    1.293,    1.263,    1.263,    1.274,   1.318,
+                    1.391,     1.380,    1.327,    1.254,    1.165,    1.091,    1.015,    0.952,    0.907,   0.826,
+                    0.688,     0.616,    0.574]
+
+   # Interpolation of the optical frequencies
     eps_real_interp = LinearInterpolation(frequencies, eps_real)
     eps_imag_interp = LinearInterpolation(frequencies, eps_imag)
+   #
     function dielectric(hw)
-        return eps_real_interp(hw) + 1im*eps_imag_interp(hw)
+        return round(eps_real_interp(hw), digits=3) + 1im*round(eps_imag_interp(hw), digits=3)
     end
 
-    # Lattice constant (length of FCC unit cell in nanometers) - 7.291 Bohr
-    a0 = 0.389
 
-    # KPM shift and scale
-    A = 0.5
-    B = 0.7
-    fermi = 0.5190/2 # Fermi energy in Hartree
-    return [onsite, first_neighbour, second_neighbour, A, B, fermi, a0, dielectric]
+   # FCC lattice constant [nm] - 7.351 bohr
+    a0 = 0.3890
+
+   # KPM shift and scale
+    min_bandval = -7.321616./Ry2eV./2  # min, no fermi [Ha]
+    max_bandval = 21.327423./Ry2eV./2  # max, no fermi [Ha]
+    fermi = 0.5190./2  # Fermi energy [Ha]
+
+    A = (max_bandval-min_bandval)./2 + min_bandval + fermi
+    B = (max_bandval-min_bandval)./2 * 1.05
+    println("A = ", round(A, digits=3))
+    println("B = ", round(B, digits=3))
+
+
+    return [onsite, first_neighbor, second_neighbor, A, B, fermi, a0, dielectric]
 end

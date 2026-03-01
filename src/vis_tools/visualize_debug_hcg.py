@@ -27,7 +27,7 @@ f.close()
 
 # Ni = len(Ei)
 # Nj = len(Ej)
-print("plottning: ")
+print("Plotting: ")
 
 fig, axs = plt.subplots(2,3,figsize=(10,5))
 axs[0,0].pcolormesh(Ei, Ej, Φ, rasterized=True)

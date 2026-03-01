@@ -1,58 +1,61 @@
 using DelimitedFiles
 
-masterdir = "../"
-include(masterdir * "libs/slater_koster.jl")
-include(masterdir * "libs/shape_lib.jl")
-include(masterdir * "libs/potential.jl")
-include(masterdir * "libs/cheb.jl")
-include(masterdir * "libs/sumcheb.jl")
-include(masterdir * "libs/dist.jl")
-include(masterdir * "libs/hcg.jl")
-include(masterdir * "libs/dos.jl")
+pathw = "../"
+include(pathw*"libs/cheb.jl")
+include(pathw*"libs/dist.jl")
+include(pathw*"libs/dos.jl")
+include(pathw*"libs/hcg.jl")
+include(pathw*"libs/potential.jl")
+include(pathw*"libs/shape_lib.jl")
+include(pathw*"libs/slater_koster.jl")
+include(pathw*"libs/sumcheb.jl")
 
+
+# Script with full control over every parameter of the DOS calculation
 function lowlevel_dos()
-    # Script with full control over all parameters of the simulation
 
-    N  = 300 # number of total Chebyshev polynomials
-    Nk = 2   # number of random vectors
-
-    perc = 100   # percentage of Chebyshev moments to keep
-    minE_Ha = -1 # smallest energy
-    maxE_Ha = +1 # largest energy
-    NE = 1000    # number of energies
-    flag = 2     # flag=2 means random vectors
-
+   # Properties of the nanoparticle (see documentation for options)
     mater = "gold"
     shape = "cube"
-    rad = 5.1 # [nm] dimension of nanoparticle
+    rad = 5.1  # NP radius [nm]
     outname = "dos.dat"
 
-    # Select material
-    onsite, first_neighbour, second_neighbour, A, B, fermi_Ha, a0, diel = tightbinding(mater)
+    N  = 300  # total number of Chebyshev polynomials
+    Nk = 2    # number of random vectors
+
+    perc = 100    # percentage of Chebyshev moments to keep
+    minE_Ha = -1  # smallest energy point
+    maxE_Ha = +1  # largest energy point
+    NE = 1000     # number of energy points
+    flag = 2      # f=2 -> random vectors
 
 
-    # Generate list of atomic positions
-    Elist, Edict, R = generate_shape_FCC(rad, shape, a0)
-    println("number of atoms", length(R))
+   # Construct the TB model corresponding to the selected material
+    onsite, first_neighbor, second_neighbor, A, B, fermi_Ha, a0, diel = tightbinding(mater)
 
-    # Use list of atomic positions to determine the Hamiltonian. H is in KPM units
-    H = slater_koster_FCC(Elist, Edict, onsite, first_neighbour, second_neighbour, A, B)
+   # Generate list of atomic positions
+    Elist, Edict, R = generate_shape_FCC(shape, a0, rad)
+    @printf("\nNumber of atoms: %d\n", length(R))
 
-    # Build the Chebyshev vector
+   # Use list of atomic positions to determine the Hamiltonian H [KPM units]
+    H, v = slater_koster_FCC(Elist, Edict, onsite, first_neighbor, second_neighbor, A, B)
+
+   # Build the Chebyshev vector
     mu = doscompute_mu!(H, N, Nk, flag)
 
-    # Resum the Chebyshev vector into the DoS
+   # Resum the Chebyshev vector into the DOS
     dos = get_dos(mu, perc, minE_Ha, maxE_Ha, NE, A, B)
 
-    # Save to file
+
+   # Save to file
     open(outname, "w") do io
-        writedlm(io, dos)
+        for i in 1:size(dos,1)
+            for j in 1:size(dos,2)
+                @printf(io,"%12.8f ",dos[i,j])
+            end
+            Base.write(io,"\n")
+        end
     end
-
-
-
 end
-
-
 
 lowlevel_dos()

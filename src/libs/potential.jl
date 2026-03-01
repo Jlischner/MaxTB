@@ -1,48 +1,48 @@
 using DataStructures
+using Dates
 using Interpolations
 using LinearAlgebra
-using SparseArrays
-using MKLSparse
-using Dates
-using Random
 using MKL
-using Printf
+using MKLSparse
 using NearestNeighbors
+using Printf
+using Random
+using SparseArrays
+
 
 function linear_pot(R, Norbitals = 9)
-    # Builds the diagonal potential from the set of positions, assuming it is
-    # proportional to z (exact for dielectric sphere)
+   # Builds the diagonal potential from the set of positions, assuming it is
+   # proportional to z (exact for dielectric sphere)
 
-    Nat = size(R,1)     # number of atoms
-    N   = Nat*Norbitals # size of Hilbert space
+    Nat = size(R,1)  # number of atoms
+    N   = Nat*Norbitals  # size of Hilbert space
 
-    # Put potential in the form of a sparse matrix
+   # Put potential in the form of a sparse matrix
     iidx  = zeros(Int64, N)
     jidx  = zeros(Int64, N)
     value = zeros(ComplexF64, N)
 
-    # Iterate over the atoms and orbitals
+   # Iterate over the atoms and orbitals
     for i=1:Nat
         for j=1:Norbitals
             n = (i-1)*Norbitals + j
             iidx[n]  = n
             jidx[n]  = n
-            value[n] = R[i,3] # proportional to z
-        end 
-    end 
+            value[n] = R[i,3]  # proportional to z
+        end
+    end
 
-    # build potential as sparse matrix
+   # Build potential as sparse matrix
     phi = sparse(iidx, jidx, value)
     return phi
 end
 
 
-
 function comsol_read(filename;Norbitals=9,Nomean=true,factor=1.0)
-    # Read the potential from a COMSOL file
+   # Read the potential from a COMSOL file
     f=open(filename,"r")
 
-    # Ignore the first 9 lines (header)
+   # Ignore the first 9 lines (header)
     for i=1:9
         😅=readline(f)
     end
@@ -59,13 +59,13 @@ function comsol_read(filename;Norbitals=9,Nomean=true,factor=1.0)
         end
     end
 
-    # Remove mean, reduces fluctuations
+   # Remove mean, reduces fluctuations
     if Nomean
         mean=mean_aux/length(φ)
         φ=φ.-mean
     end 
 
-    # Put potential in the form of a sparse matrix
+   # Put potential in the form of a sparse matrix
     iidx=zeros(Int64,length(φ)*Norbitals)
     jidx=zeros(Int64,length(φ)*Norbitals)
     value=zeros(ComplexF64,length(φ)*Norbitals)
@@ -83,13 +83,12 @@ function comsol_read(filename;Norbitals=9,Nomean=true,factor=1.0)
 end
 
 
-
 function write_pot(outname, R, phi)
-    # Write the potential and positions to a file with COMSOL format
-    
+   # Write the potential and positions to a file with COMSOL format
+
     fw = open(outname, "w")
 
-    # Write header
+   # Write header
     write(fw, "% Model:              octa2.mph")
     write(fw, "% Version:            COMSOL 5.5.0.359")
     write(fw, "% Date:               Sep 29 2022, 16:37")
@@ -100,14 +99,14 @@ function write_pot(outname, R, phi)
     write(fw, "% Length unit:        nm")
     write(fw, "x               y               z               V (V)")
 
-    # Iterate over the positions and write to file
-    Nat = length(R)   # find number of atoms
-    N   = length(phi) # find size of Hilbert space
+   # Iterate over the positions and write to file
+    Nat = length(R)  # find number of atoms
+    N   = length(phi)  # find size of Hilbert space
     if N % Nat != 0
         println("Number of atoms does not divide size of Hilbert space. Exiting")
         exit()
     end
-    Norbitals = N ÷ Nat # integer division
+    Norbitals = N ÷ Nat  # integer division
     for i in 1:Nat
 
         x = R[i,1]
@@ -123,11 +122,11 @@ function write_pot(outname, R, phi)
         write(fw,@sprintf("%f\t\t%f\t\t%f\t\t%+f%+f",x,y,z,Vr,Vi)*"i\n")
     end
     close(fw)
-
 end
 
+
 function potential_sphere(R, eps, eps_m; Norbitals=9)
-    # Get the electric potential inside the sphere
+   # Get the electric potential inside the sphere
 
     induced = -3*eps_m/(eps + 2*eps_m)
     phi = linear_pot(R, Norbitals)*induced
@@ -136,13 +135,12 @@ end
 
 
 # function write_linear_tofile(infile, outfile, eps_m, eps)
-    # Get the electric potential inside the sphere
-    # Read positions from file and write potential to another file
-
-    # Fetch the dielectric constant for gold (ε) at this frequency
-    # and the dielectric constant of the surrounding environment (ε_m)
-
-    # factor = -3*eps_m/(eps + 2*eps_m)
-    # linear_pot(infile, outfile, factor)
-
+#     # Get the electric potential inside the sphere
+#     # Read positions from file and write potential to another file
+#
+#     # Fetch the dielectric constant for gold (ε) at this frequency
+#     # and the dielectric constant of the surrounding environment (ε_m)
+#
+#     factor = -3*eps_m/(eps + 2*eps_m)
+#     linear_pot(infile, outfile, factor)
 # end
