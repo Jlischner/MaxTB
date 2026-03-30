@@ -88,6 +88,119 @@ function sum_hcg(phi,Ei,Ej,Nx,Ny,fermi_Ha, hw, beta, kappa, gph, debug)
 end
 
 
+function sum_absorption(opt, Ei, Ej, Nw, hw_range, fermi_Ha, beta, gph, diel, eps_m)
+    # Compute the absorption spectrum from the optical matrix in energy space.
+    # opt      : optical matrix M_geom(E,E') computed with linear_pot (no dielectric prefactor)
+    # Ei, Ej   : energy grids in eV
+    # Nw       : number of integration points along each energy axis
+    # hw_range : vector of photon energies in eV
+    # diel     : dielectric function of the material (frequency in eV -> complex number)
+    # eps_m    : dielectric constant of the environment
+    #
+    # σ(ω) ∝ |C(ω)|² × (1/ω) × ∫∫ dE dE' M_geom(E,E') [f(E)-f(E')] G(E'-E-ω; gij)
+    # where C(ω) = -3εₘ/(ε(ω)+2εₘ) and G is a Gaussian with width gij = 2*gph
+    # Same broadening kernel as build_mask_hcg (kappa=0 limit).
+
+    fermi_eV = fermi_Ha * HaeV
+
+    phi_itp = LinearInterpolation((Ei, Ej), opt)
+
+    xi = Ei[1]; xf = Ei[end]
+    yi = Ej[1]; yf = Ej[end]
+    xs = LinRange(xi, xf, Nw)
+    ys = LinRange(yi, yf, Nw)
+    dx = xs[2] - xs[1]
+    dy = ys[2] - ys[1]
+
+    # Precompute phi on regular 2D grid and Fermi factors
+    phi_mat = phi_itp(xs, ys)
+    fi_vec  = [1.0 / (1.0 + exp(beta * (E - fermi_eV))) for E in xs]
+    fj_vec  = [1.0 / (1.0 + exp(beta * (E - fermi_eV))) for E in ys]
+
+    gij    = 2.0 * gph
+    amp    = 1.0 / sqrt(2.0 * pi * gij^2)
+    cutoff = 4.0 * gij   # truncate Gaussian at 4σ
+
+    σ = zeros(length(hw_range))
+
+    for (k, hw) in enumerate(hw_range)
+        # Dielectric prefactor |C(ω)|² for quasi-static sphere
+        eps      = diel(hw)
+        C_omega2 = abs2(-3.0 * eps_m / (eps + 2.0 * eps_m))
+
+        integral = 0.0
+        for i in 1:Nw
+            Ei_val = xs[i]
+            fi     = fi_vec[i]
+            # Only j within 4σ of exact energy conservation E' = E + hw
+            j_lo = searchsortedfirst(ys, Ei_val + hw - cutoff)
+            j_hi = searchsortedlast(ys,  Ei_val + hw + cutoff)
+            for j in j_lo:j_hi
+                dE     = ys[j] - Ei_val - hw
+                kernel = amp * exp(-dE^2 / (2.0 * gij^2))
+                integral += phi_mat[i, j] * (fi - fj_vec[j]) * kernel
+            end
+        end
+
+        σ[k] = C_omega2 * integral * dx * dy / hw
+    end
+
+    factor = 2 * pi * 4 / pi^2
+    σ = σ .* factor
+
+    return collect(hw_range), σ
+end
+
+
+function broaden_spectrum(hw, σ, gamma; kernel::Symbol=:lorentzian)
+    # Convolve the absorption spectrum σ(ω) with a Gaussian or Lorentzian kernel.
+    # hw    : frequency grid [eV]
+    # σ     : raw absorption spectrum
+    # gamma : broadening width [eV] (std dev for Gaussian, half-width for Lorentzian)
+    # kernel: :gaussian or :lorentzian
+    #
+    # Gaussian:   K(x) = exp(-x²/2γ²) / (√(2π) γ)
+    # Lorentzian: K(x) = (γ/π) / (x² + γ²)
+
+    N     = length(hw)
+    dw    = hw[2] - hw[1]
+    σ_out = zeros(N)
+
+    for i in 1:N
+        norm = 0.0
+        val  = 0.0
+        for j in 1:N
+            x = hw[i] - hw[j]
+            if kernel == :gaussian
+                k = exp(-x^2 / (2.0 * gamma^2)) / (sqrt(2.0 * pi) * gamma)
+            else  # lorentzian
+                k = (gamma / pi) / (x^2 + gamma^2)
+            end
+            val  += σ[j] * k * dw
+            norm += k * dw
+        end
+        σ_out[i] = val / norm
+    end
+
+    return hw, σ_out
+end
+
+
+function absorption_auto(mumn, A, B, Nw, fermi_Ha, hw_range, beta, gph, diel, eps_m)
+    # Full pipeline: from Chebyshev moments to absorption spectrum.
+    # mumn should be computed with linear_pot(R) (geometric potential, no C(ω) prefactor).
+
+    perc100 = 100
+    N1, N2  = size(mumn)
+    Nx = N1*2 + 1
+    Ny = N2*2 + 1
+
+    Ei, Ej, opt = resum_mu_dd(mumn, Nx, Ny, A, B, perc100, perc100)
+
+    return sum_absorption(opt, Ei, Ej, Nw, hw_range, fermi_Ha, beta, gph, diel, eps_m)
+end
+
+
 function write_hcg_to_hdf(db_pack, name)
    # Write the debug information to an hdf file
     if length(db_pack) == 0

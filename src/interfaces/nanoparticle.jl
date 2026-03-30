@@ -87,6 +87,20 @@ function calculation_builder_bands(;name::AbstractString="bands.dat")
 end
 
 
+function calculation_builder_absorption(hw_range; temp::Float64=298.0, gph::Float64=0.01, N::Int64=200, NR::Int64=5, NB::Int64=10, Nw::Int64=1000, eps_m::Float64=1.0, name::AbstractString="absorption.dat")
+    # hw_range : vector of photon energies in eV (e.g. range(1.0, 6.0, 100))
+    # temp     : temperature in K
+    # gph      : lifetime broadening in eV
+    # N        : number of Chebyshev polynomials
+    # NR       : number of random vectors
+    # NB       : number of polynomials per block
+    # Nw       : number of integration points in energy
+    # eps_m    : dielectric constant of the environment
+    description = "absorption"
+    return [description, collect(hw_range), temp, gph, N, NR, NB, Nw, eps_m, name]
+end
+
+
 # BUILDER HCG
 function calculation_builder_hcg(;temp::Float64=298.0, gph::Float64=0.01, N::Int64=200, NR::Int64=5, NB::Int64=10, NE::Int64=1000, conv::Bool=false, name::AbstractString="hcg.dat")
     #
@@ -139,24 +153,27 @@ end
 
 
 
-# Perform the complete workflow:  hcg + dist + dos + band
-function nanoparticle_run(;ham_builder=[], pot_builder=[], hcg_builder=[], dist_builder=[], dos_builder=[], band_builder=[])
-    #
-    @printf("\n\n >>>  MAXTB PROGRAM STARTED  --  %s  <<<\n\n",Dates.format(now(), "HH:MM:SS / yyyy-mm-dd")) ; flush(stdout)
-    t0 = time()
-    #
-   # Check which builders have been specified
-    ham_b = length(ham_builder)  > 0
-    pot_b = length(pot_builder)  > 0
-    hcg_b = length(hcg_builder)  > 0
+
+
+
+
+
+function nanoparticle_run(;ham_builder=[], pot_builder=[], hcg_builder=[], dist_builder=[], dos_builder=[], band_builder=[], abs_builder=[])
+    # Perform the complete workflow to obtain the hot carrier generation/distribution 
+
+
+    # Check which builders have been specified
+    ham_b = length(ham_builder ) > 0
+    pot_b = length(pot_builder ) > 0
+    hcg_b = length(hcg_builder ) > 0
     dis_b = length(dist_builder) > 0
     dos_b = length(dos_builder)  > 0
     ban_b = length(band_builder) > 0
-    #
-   # Check what needs to be done
-    need_mat = hcg_b || dis_b || dos_b || ban_b
-    need_at  = hcg_b || dis_b || dos_b 
-    need_H   = hcg_b || dis_b || dos_b 
+    abs_b = length(abs_builder ) > 0
+
+    need_mat = hcg_b || dis_b || dos_b || ban_b || abs_b
+    need_at  = hcg_b || dis_b || dos_b || abs_b
+    need_H   = hcg_b || dis_b || dos_b || abs_b
     need_V   = hcg_b || dis_b
     #
     if need_H && !ham_b
@@ -380,7 +397,29 @@ function nanoparticle_run(;ham_builder=[], pot_builder=[], hcg_builder=[], dist_
         end
         @printf("    |CPU time: %.0f s|\n", time() - t0) ; flush(stdout)
     end
-    #
+    if abs_b
+        @printf("\n\n><  Computing the absorption spectrum  ><\n") ; flush(stdout)
+
+        desc, hw_range, tempr, gph, N, NR, NB, Nw, eps_m, name = abs_builder
+
+        NTx = NB
+        NTy = NB
+        NNL = N÷NTx + 1
+        NNR = N÷NTy + 1
+
+        # Use the purely geometric potential (z only, no dielectric prefactor).
+        # The C(ω) = -3εₘ/(ε(ω)+2εₘ) factor is applied inside absorption_auto.
+        Phi_geom = linear_pot(R)
+        mumn_geom = compute_mumn!(H, Phi_geom, NNL, NNR, NTx, NTy, NR)
+
+        kbT  = tempr * boltzmann
+        beta = 1.0 / kbT
+
+        hw_out, σ = absorption_auto(mumn_geom, A, B, Nw, fermi_Ha, hw_range, beta, gph, diel, eps_m)
+
+        writedlm(name, hcat(hw_out, σ))
+        @printf("    |CPU time: %.0f s|\n", time() - t0) ; flush(stdout)
+    end
+
     @printf("\n\n >>>>  MAXTB PROGRAM ENDED  --  %s  <<<<\n\n\n",Dates.format(now(), "HH:MM:SS / yyyy-mm-dd")) ; flush(stdout)
-    #
 end

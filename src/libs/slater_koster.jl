@@ -215,10 +215,240 @@ function get_bands(onsite, nearest, second)
 end
 
 
-function slater_koster_FCC(Elist, Edict, onsite, first_neighbor, second_neighbor, A, B; L1=999999, L2=999999, L3=999999, periodic=false)
-   # Use the Slater-Koster parametrization for a set of atomic positions defined in Elist and Edict,
-   # using the parameters onsite, first_neighbor, second_neighbor
-   # This is only valid for the FCC lattice
+
+############LEONARDO#################
+
+
+function read_xyz_positions(filename::AbstractString)
+    # Read coordinates from a standard XYZ file and return an Nat x 3 matrix.
+    lines = readlines(filename)
+    if length(lines) < 2
+        error("XYZ file $filename must contain at least two header lines")
+    end
+
+    Nat = try
+        parse(Int, strip(lines[1]))
+    catch
+        error("First line of XYZ file $filename must be the number of atoms")
+    end
+
+    R = zeros(Float64, Nat, 3)
+    parsed = 0
+
+    for (offset, line) in enumerate(lines[3:end])
+        line_number = offset + 2
+        parsed == Nat && break
+
+        l = strip(line)
+        isempty(l) && continue
+        fields = split(l)
+
+        # Accept either "Au x y z" or "x y z".
+        first_as_float = tryparse(Float64, fields[1])
+        coord_start = isnothing(first_as_float) ? 2 : 1
+        if length(fields) < coord_start + 2
+            error("Malformed XYZ line $line_number in $filename: expected 3 coordinates")
+        end
+
+        x = try
+            parse(Float64, fields[coord_start])
+        catch
+            error("Malformed x coordinate at XYZ line $line_number in $filename")
+        end
+        y = try
+            parse(Float64, fields[coord_start + 1])
+        catch
+            error("Malformed y coordinate at XYZ line $line_number in $filename")
+        end
+        z = try
+            parse(Float64, fields[coord_start + 2])
+        catch
+            error("Malformed z coordinate at XYZ line $line_number in $filename")
+        end
+
+        parsed += 1
+        R[parsed, 1] = x
+        R[parsed, 2] = y
+        R[parsed, 3] = z
+    end
+
+    if parsed != Nat
+        error("XYZ file $filename declares $Nat atoms but only $parsed were parsed")
+    end
+
+    return R
+end
+
+
+function infer_neighbor_shells(R::Array{Float64,2}; k_probe::Int64=24, shell_split::Float64=0.08)
+    # Infer first and second neighbor distances from local nearest-neighbor statistics.
+    Nat = size(R, 1)
+    if Nat < 3
+        error("Need at least 3 atoms to infer first and second neighbor shells")
+    end
+
+    points = permutedims(R) # 3 x Nat
+    tree = KDTree(points)
+    k = min(k_probe, Nat)
+    _, dists = knn(tree, points, k, true)
+
+    first_local = Float64[]
+    second_local = Float64[]
+    epsd = 1e-12
+
+    for i in 1:Nat
+        di = dists[i]
+        d1 = 0.0
+        d2 = 0.0
+        for d in di
+            if d <= epsd
+                continue
+            end
+            if d1 <= epsd
+                d1 = d
+            elseif d > d1 * (1.0 + shell_split)
+                d2 = d
+                break
+            end
+        end
+
+        if d1 > epsd
+            push!(first_local, d1)
+        end
+        if d2 > epsd
+            push!(second_local, d2)
+        end
+    end
+
+    if isempty(first_local) || isempty(second_local)
+        error("Could not infer first and second neighbor shells from coordinates")
+    end
+
+    sort!(first_local)
+    sort!(second_local)
+    mid1 = length(first_local) ÷ 2 + 1
+    mid2 = length(second_local) ÷ 2 + 1
+
+    return first_local[mid1], second_local[mid2]
+end
+
+
+function slater_koster_general(R::Array{Float64,2}, onsite, first_neighbour, second_neighbour, A, B;
+                               first_shell=nothing, second_shell=nothing, shell_tol::Float64=0.12,
+                               Norbitals::Int64=9, position_scale::Float64=1.0)
+    # Slater-Koster for arbitrary coordinates (non-FCC):
+    # neighbor shells are identified by distance and missing neighbors are simply omitted.
+    Nat, ndim = size(R)
+    if ndim != 3
+        error("R must have size Nat x 3")
+    end
+    if Nat == 0
+        error("R cannot be empty")
+    end
+
+    d1 = isnothing(first_shell) ? nothing : Float64(first_shell)
+    d2 = isnothing(second_shell) ? nothing : Float64(second_shell)
+    if isnothing(d1) || isnothing(d2)
+        d1i, d2i = infer_neighbor_shells(R)
+        d1 = isnothing(d1) ? d1i : d1
+        d2 = isnothing(d2) ? d2i : d2
+    end
+    if d1 <= 0 || d2 <= 0 || d2 <= d1
+        error("Invalid shell distances: first_shell=$d1 second_shell=$d2")
+    end
+
+    low1 = d1 * (1.0 - shell_tol)
+    high1 = d1 * (1.0 + shell_tol)
+    low2 = d2 * (1.0 - shell_tol)
+    high2 = d2 * (1.0 + shell_tol)
+    if high1 >= low2
+        error("Neighbor shell windows overlap, lower shell_tol or set explicit shell distances")
+    end
+
+    onsiteKPM = (onsite .- A) ./ B
+
+    iidx = Int64[]
+    jidx = Int64[]
+    value = ComplexF64[]
+
+    iidx_r = Int64[]
+    value_r = ComplexF64[]
+
+    function addV!(iidx, jidx, value, V, iptr, jptr)
+        local a, b = size(V)
+        for i = 1:a
+            for j = 1:b
+                vv = V[i, j]
+                if abs(vv) > 1e-10
+                    push!(iidx, iptr + i)
+                    push!(jidx, jptr + j)
+                    push!(value, vv)
+                end
+            end
+        end
+    end
+
+    # Onsite terms and position operator, mirroring the FCC workflow.
+    for Atomi = 1:Nat
+        iptr = (Atomi - 1) * Norbitals
+        for k = 1:Norbitals
+            push!(iidx, k + iptr)
+            push!(jidx, k + iptr)
+            push!(value, onsiteKPM[k])
+
+            push!(iidx_r, k + iptr)
+            push!(value_r, R[Atomi] * position_scale)
+        end
+    end
+
+    points = permutedims(R) # 3 x Nat
+    tree = KDTree(points)
+
+    # Build hoppings by distance shells; surface atoms naturally have fewer neighbors.
+    for Atomi = 1:Nat
+        neigh = inrange(tree, points[:, Atomi], high2, true)
+        iptr = (Atomi - 1) * Norbitals
+        for Atomj in neigh
+            Atomj <= Atomi && continue
+
+            Rij = vec(points[:, Atomj] .- points[:, Atomi])
+            dij = norm(Rij)
+
+            hops = nothing
+            if low1 <= dij <= high1
+                hops = first_neighbour
+            elseif low2 <= dij <= high2
+                hops = second_neighbour
+            else
+                continue
+            end
+
+            jptr = (Atomj - 1) * Norbitals
+            Vij = getVAA(Rij, hops) ./ B
+            Vji = getVAA(-Rij, hops) ./ B
+            addV!(iidx, jidx, value, Vij, iptr, jptr)
+            addV!(iidx, jidx, value, Vji, jptr, iptr)
+        end
+    end
+
+    N = Nat * Norbitals
+    H = sparse(iidx, jidx, value, N, N)
+    pos_operator = sparse(iidx_r, iidx_r, value_r, N, N)
+    v = (H * pos_operator - pos_operator * H) .* im
+    return H, v
+end
+
+
+function slater_koster_general(xyz_file::AbstractString, onsite, first_neighbour, second_neighbour, A, B; kwargs...)
+    R = read_xyz_positions(xyz_file)
+    return slater_koster_general(R, onsite, first_neighbour, second_neighbour, A, B; kwargs...)
+end
+
+
+function slater_koster_FCC(Elist, Edict, onsite, first_neighbour, second_neighbour, A, B; L1=999999, L2=999999, L3=999999, periodic=false)
+    # Use the Slater-Koster parametrization for a set of atomic positions defined in Elist and Edict, 
+    # using the parameters onsite, first_neighbour, second_neighbour
+    # This is only valid for the FCC lattice
 
    # Get the TB parameters
    # onsite, first_neighbor, second_neighbor, A, B, fermi, diel_fun = tightbinding(material)
